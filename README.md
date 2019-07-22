@@ -21,3 +21,6 @@ Two properties files are required:
     * region = someRegion
     * service_name = execute-api
 
+Add the AWS request signing interceptor jar file to your Maven environment:
+* git clone  https://github.com/awslabs/aws-request-signing-apache-interceptor.git
+* perform a mvn install in your local repo
