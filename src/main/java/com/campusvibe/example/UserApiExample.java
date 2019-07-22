@@ -2,8 +2,8 @@ package com.campusvibe.example;
 
 import java.io.*;
 import java.net.*;
-import java.util.*;
 import java.util.Map.Entry;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 import org.apache.http.HttpEntity;
@@ -19,66 +19,58 @@ import com.amazonaws.services.securitytoken.*;
 import com.amazonaws.services.securitytoken.model.*;
 
 public class UserApiExample {
-    private static final String PATH_USERLIST = "Prod/user";
-    private static final String PROTOCOL = "https";
-    private static final String HOST = "ss2jjhgmj1.execute-api.us-east-1.amazonaws.com";
-    private static final String ROLESESSIONNAME = "marksession";
-    private static final String APIKEY = "gFghdLyQ90aR9RuCG0UCU8OS5UoAuuSk4KL3gFYr";
-    private static final String ASSUMEDROLE = "arn:aws:iam::628097307670:role/3rdageTestRole";
-    private static final String EXTERNALID = "campusvibe";
-    private static final String REGION = "us-east-1";
-    private static final String SERVICENAME = "execute-api";
 
-    // "arn:aws:iam::{{otherAWSAccountID}}:role/{{otherAWSRoleName}}"
+    static ClientConfig CONFIG;
+    static {
+        CONFIG = ClientConfig.load("aws-gw.properties");
+    }
+
+    // AWS Account Credential properties file containing accessKey/secretKey
+    private static final String CREDENTIALS = "creds.properties";
+    // Role session name, used for log tracing etc
+    private static final String ROLESESSIONNAME = "myapisession";
 
     public static void main(String[] args) {
         initlogs();
-        AssumeRoleResult session_token_result = getststoken();
+        final AssumeRoleResult session_token_result = getststoken();
         try {
             TreeMap<String, String> qParms = new TreeMap<>();
-            qParms.put("usertype", "Student");
-            URI uri = new URIBuilder()
-                .setScheme(PROTOCOL)
-                .setHost(HOST)
-                .setPath(PATH_USERLIST)
-                .setParameters(qParms.entrySet().stream()
-                    .map(p -> new BasicNameValuePair(p.getKey(), p.getValue()))
-                    .collect(Collectors.toList()))
-                .build();
-            System.out.println(uri.normalize().toString());
-            TreeMap<String, String> awsHeaders = new TreeMap<String, String>();
-            awsHeaders.put("host",
-                uri.getHost());
-            awsHeaders.put("x-amz-security-token",
-                session_token_result.getCredentials().getSessionToken());
-            awsHeaders.put("x-api-key",
-                APIKEY);
-            getUsers(uri, awsHeaders,
-                session_token_result.getCredentials().getAccessKeyId(),
-                session_token_result.getCredentials().getSecretAccessKey());
-        } catch (URISyntaxException e) {
-            throw new RuntimeException(e);
-        } catch (ClientProtocolException e) {
-            throw new RuntimeException(e);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+            // Example query parameters:
 
+            // qParms.put("loginid", "gemadmin@campusvibe.com");
+            // qParms.put("roleadmin", "true");
+            // qParms.put("roleorganizer", "true");
+            // qParms.put("program", "School of Business");
+            // qParms.put("firstname", "joe");
+            // qParms.put("lastname", "demo");
+            // qParms.put("emailaddress", "mark@3rdagesystems.com");
+            // qParms.put("state", "active");
+            qParms.put("usertype", "Staff");
+
+            final InputStream in = buildAndExecuteGetList(session_token_result,
+                qParms);
+            new BufferedReader(new InputStreamReader(in))
+                .lines().forEach(p -> System.out.println(p));
+
+            in.close();
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+        }
     }
 
     private static AssumeRoleResult getststoken() {
         AWSSecurityTokenService awssts = AWSSecurityTokenServiceClientBuilder
             .standard()
             .build();
-        AssumeRoleResult session_token_result = awssts
+        return awssts
             .assumeRole(new AssumeRoleRequest()
-                .withRoleArn(ASSUMEDROLE)
-                .withRoleSessionName(ROLESESSIONNAME).withExternalId(EXTERNALID)
+                .withRoleArn(CONFIG.getAssumedRole())
+                .withRoleSessionName(ROLESESSIONNAME)
+                .withExternalId(CONFIG.getExternalId())
                 .withDurationSeconds(1000)
                 .withRequestCredentialsProvider(
                     new PropertiesFileCredentialsProvider(
-                        "creds.properties")));
-        return session_token_result;
+                        CREDENTIALS)));
     }
 
     private static void initlogs() {
@@ -108,29 +100,50 @@ public class UserApiExample {
             "DEBUG");
     }
 
-    private static void getUsers(
-            URI uri,
-            Map<String, String> awsHeaders,
-            String accessKeyId,
-            String secretAccessKey)
+    private static InputStream buildAndExecuteGetList(
+            AssumeRoleResult session_token_result,
+            TreeMap<String, String> qParms)
             throws IOException,
             ClientProtocolException {
+        URI uri;
+        try {
+            uri = new URIBuilder()
+                .setScheme(CONFIG.getProtocol())
+                .setHost(CONFIG.getHost())
+                .setPath(CONFIG.getPathUserList())
+                .setParameters(qParms.entrySet().stream()
+                    .map(p -> new BasicNameValuePair(p.getKey(), p.getValue()))
+                    .collect(Collectors.toList()))
+                .build();
+        } catch (URISyntaxException e) {
+            throw new RuntimeException(e);
+        }
+        TreeMap<String, String> awsHeaders = new TreeMap<String, String>();
+        awsHeaders.put("host",
+            uri.getHost());
+        awsHeaders.put("x-amz-security-token",
+            session_token_result.getCredentials().getSessionToken());
+        awsHeaders.put("x-api-key",
+            CONFIG.getApiKey());
         HttpGet get = new HttpGet(uri);
         for (Entry<String, String> item : awsHeaders.entrySet()) {
             get.addHeader(item.getKey(), item.getValue());
         }
         AWS4Signer signer = new AWS4Signer();
-        signer.setServiceName(SERVICENAME);
-        signer.setRegionName(REGION);
+        signer.setServiceName(CONFIG.getServiceName());
+        signer.setRegionName(CONFIG.getRegion());
         HttpEntity ent = HttpClients
             .custom()
             .addInterceptorLast(new AWSRequestSigningApacheInterceptor(
-                SERVICENAME, signer, new AWSStaticCredentialsProvider(
-                    new BasicAWSCredentials(accessKeyId, secretAccessKey))))
+                CONFIG.getServiceName(), signer,
+                new AWSStaticCredentialsProvider(
+                    new BasicAWSCredentials(
+                        session_token_result.getCredentials().getAccessKeyId(),
+                        session_token_result.getCredentials()
+                            .getSecretAccessKey()))))
             .build()
             .execute(get)
             .getEntity();
-        new BufferedReader(new InputStreamReader(ent.getContent()))
-            .lines().forEach(p -> System.out.println(p));
+        return ent.getContent();
     }
 }
