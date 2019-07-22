@@ -8,10 +8,8 @@ Project setup:
 Two properties files are required:
 
 creds.properties: AWS Account ID credentials
-
-  -accessKey = yourAWSAccessKey
-  
-  -secretKey = yourAWSSecretKey
+  *accessKey = yourAWSAccessKey
+  *secretKey = yourAWSSecretKey
   
 aws-gw.properties: AWS Gateway parameters (api-key, various ids)
   -assumed_role = someArnRol
