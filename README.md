@@ -21,3 +21,6 @@ Two properties files are required:
     * region = someRegion
     * service_name = execute-api
 
+## Run demo
+    * mvn exec:java
+
