@@ -33,6 +33,31 @@ public class UserApiExample {
     public static void main(String[] args) {
         initlogs();
         final AssumeRoleResult session_token_result = getststoken();
+        System.out.println("\n\n======== User list demo");
+        demoUserList(session_token_result);
+        System.out.println("\n\n======== User query demo");
+        demoUser(session_token_result, "user1@campusvibe.com");
+    }
+
+    private static void demoUser(
+            AssumeRoleResult session_token_result,
+            String loginid) {
+
+        try {
+            final InputStream in = buildAndExecuteGet(session_token_result,
+                CONFIG.getPathUserList() + "/" + loginid,
+                new TreeMap<String, String>());
+            new BufferedReader(new InputStreamReader(in))
+                .lines().forEach(p -> System.out.println(p));
+
+            in.close();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private static void demoUserList(
+            final AssumeRoleResult session_token_result) {
         try {
             TreeMap<String, String> qParms = new TreeMap<>();
             // Example query parameters:
@@ -47,8 +72,8 @@ public class UserApiExample {
             // qParms.put("state", "active");
             qParms.put("usertype", "Staff");
 
-            final InputStream in = buildAndExecuteGetList(session_token_result,
-                qParms);
+            final InputStream in = buildAndExecuteGet(session_token_result,
+                CONFIG.getPathUserList(), qParms);
             new BufferedReader(new InputStreamReader(in))
                 .lines().forEach(p -> System.out.println(p));
 
@@ -75,33 +100,34 @@ public class UserApiExample {
 
     private static void initlogs() {
         java.util.logging.Logger.getLogger("com.amazonaws")
-            .setLevel(java.util.logging.Level.FINEST);
+            .setLevel(java.util.logging.Level.INFO);
         System.setProperty("org.apache.commons.logging.Log",
             "org.apache.commons.logging.impl.SimpleLog");
         System.setProperty("org.apache.commons.logging.simplelog.showdatetime",
             "true");
         System.setProperty(
             "org.apache.commons.logging.simplelog.log.org.apache.http.wire",
-            "DEBUG");
+            "INFO");
         System.setProperty(
             "org.apache.commons.logging.simplelog.log.org.apache.http.impl.conn",
-            "DEBUG");
+            "INFO");
         System.setProperty(
             "org.apache.commons.logging.simplelog.log.org.apache.http.impl.client",
-            "DEBUG");
+            "INFO");
         System.setProperty(
             "org.apache.commons.logging.simplelog.log.org.apache.http.client",
-            "DEBUG");
+            "INFO");
         System.setProperty(
             "org.apache.commons.logging.simplelog.log.org.apache.http",
-            "DEBUG");
+            "INFO");
         System.setProperty(
             "org.apache.commons.logging.simplelog.log.com.amazonaws.auth",
-            "DEBUG");
+            "INFO");
     }
 
-    private static InputStream buildAndExecuteGetList(
+    private static InputStream buildAndExecuteGet(
             AssumeRoleResult session_token_result,
+            String path,
             TreeMap<String, String> qParms)
             throws IOException,
             ClientProtocolException {
@@ -110,7 +136,7 @@ public class UserApiExample {
             uri = new URIBuilder()
                 .setScheme(CONFIG.getProtocol())
                 .setHost(CONFIG.getHost())
-                .setPath(CONFIG.getPathUserList())
+                .setPath(path)
                 .setParameters(qParms.entrySet().stream()
                     .map(p -> new BasicNameValuePair(p.getKey(), p.getValue()))
                     .collect(Collectors.toList()))
