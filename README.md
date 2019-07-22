@@ -9,5 +9,5 @@ creds.properties: AWS Account ID credentials
 aws-gw.properties: AWS Gateway parameters (api-key, various ids)
 
 See pom.xml for additional jar file requirement:
-                <!-- https://github.com/awslabs/aws-request-signing-apache-interceptor.git -->
+                                <artifactId>aws-java-sdk-bom</artifactId>
 
