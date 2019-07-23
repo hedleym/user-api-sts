@@ -32,55 +32,63 @@ public class UserApiExample {
     // Role session name, used for log tracing etc
     private static final String ROLESESSIONNAME = "myapisession";
 
-    public static void main(String[] args) {
-        initlogs();
-        final AssumeRoleResult session_token_result = getststoken();
-        System.out.println("\n\n======== User list demo");
-        demoUserList(session_token_result);
-        System.out.println("\n\n======== User query demo");
-        demoUser(session_token_result, "user1@campusvibe.com");
-        System.out.println("\n\n======== User creation demo");
-        String newUserJsonStr = "{\"loginId\":\""
-                + LOGINID
-                + "\",\"firstName\":\"Andy\",\"lastName\":\"Bernard\",\"roleAdmin\":false,\"roleOrganizer\":false,\"emailAddress\":\"narddog1@campusvibe.com\",\"userType\":\"Staff\",\"program\":\"School of Business\"}";
-        demoUserPost(session_token_result, newUserJsonStr);
-        demoUser(session_token_result, LOGINID);
-        System.out.println("\n\n======== User modification demo");
-        String modUserJsonStr = "{"
-                + "\"loginId\":\""
-                + LOGINID
-                + "\",\"firstName\":\"Andrew\""
-                + "}";
-        demoUserPut(session_token_result, LOGINID,
-            modUserJsonStr);
-    }
-
-    private static void demoUserPut(
+    private static InputStream buildAndExecuteGet(
             AssumeRoleResult session_token_result,
-            String loginid,
-            String newUserJsonStr) {
+            String path,
+            TreeMap<String, String> qParms)
+            throws IOException,
+            ClientProtocolException {
+        URI uri;
         try {
-            final InputStream in = buildAndExecutePut(session_token_result,
-                loginid, newUserJsonStr);
-            new BufferedReader(new InputStreamReader(in))
-                .lines().forEach(p -> System.out.println(p));
-            in.close();
-        } catch (IOException e) {
+            uri = new URIBuilder()
+                .setScheme(CONFIG.getProtocol())
+                .setHost(CONFIG.getHost())
+                .setPath(path)
+                .setParameters(qParms.entrySet().stream()
+                    .map(p -> new BasicNameValuePair(p.getKey(), p.getValue()))
+                    .collect(Collectors.toList()))
+                .build();
+        } catch (URISyntaxException e) {
             throw new RuntimeException(e);
         }
-
+        TreeMap<String, String> awsHeaders = new TreeMap<String, String>();
+        awsHeaders.put("host",
+            uri.getHost());
+        awsHeaders.put("x-amz-security-token",
+            session_token_result.getCredentials().getSessionToken());
+        awsHeaders.put("x-api-key",
+            CONFIG.getApiKey());
+        HttpGet get = new HttpGet(uri);
+        for (Entry<String, String> item : awsHeaders.entrySet()) {
+            get.addHeader(item.getKey(), item.getValue());
+        }
+        AWS4Signer signer = new AWS4Signer();
+        signer.setServiceName(CONFIG.getServiceName());
+        signer.setRegionName(CONFIG.getRegion());
+        HttpEntity ent = HttpClients
+            .custom()
+            .addInterceptorLast(new AWSRequestSigningApacheInterceptor(
+                CONFIG.getServiceName(), signer,
+                new AWSStaticCredentialsProvider(
+                    new BasicAWSCredentials(
+                        session_token_result.getCredentials().getAccessKeyId(),
+                        session_token_result.getCredentials()
+                            .getSecretAccessKey()))))
+            .build()
+            .execute(get)
+            .getEntity();
+        return ent.getContent();
     }
 
-    private static InputStream buildAndExecutePut(
+    private static InputStream buildAndExecutePost(
             AssumeRoleResult session_token_result,
-            String loginid,
             String jsonEntity) {
         URI uri;
         try {
             uri = new URIBuilder()
                 .setScheme(CONFIG.getProtocol())
                 .setHost(CONFIG.getHost())
-                .setPath(CONFIG.getPathUserList() + "/" + loginid)
+                .setPath(CONFIG.getPathUserList())
                 .build();
         } catch (URISyntaxException e) {
             throw new RuntimeException(e);
@@ -93,7 +101,7 @@ public class UserApiExample {
         awsHeaders.put("x-api-key",
             CONFIG.getApiKey());
         try {
-            HttpPut post = new HttpPut(uri);
+            HttpPost post = new HttpPost(uri);
             for (Entry<String, String> item : awsHeaders.entrySet()) {
                 post.addHeader(item.getKey(), item.getValue());
             }
@@ -126,30 +134,16 @@ public class UserApiExample {
         }
     }
 
-    private static void demoUserPost(
+    private static InputStream buildAndExecutePut(
             AssumeRoleResult session_token_result,
-            String newUserJsonStr) {
-        try {
-            final InputStream in = buildAndExecutePost(session_token_result,
-                newUserJsonStr);
-            new BufferedReader(new InputStreamReader(in))
-                .lines().forEach(p -> System.out.println(p));
-            in.close();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-
-    }
-
-    private static InputStream buildAndExecutePost(
-            AssumeRoleResult session_token_result,
+            String loginid,
             String jsonEntity) {
         URI uri;
         try {
             uri = new URIBuilder()
                 .setScheme(CONFIG.getProtocol())
                 .setHost(CONFIG.getHost())
-                .setPath(CONFIG.getPathUserList())
+                .setPath(CONFIG.getPathUserList() + "/" + loginid)
                 .build();
         } catch (URISyntaxException e) {
             throw new RuntimeException(e);
@@ -162,7 +156,7 @@ public class UserApiExample {
         awsHeaders.put("x-api-key",
             CONFIG.getApiKey());
         try {
-            HttpPost post = new HttpPost(uri);
+            HttpPut post = new HttpPut(uri);
             for (Entry<String, String> item : awsHeaders.entrySet()) {
                 post.addHeader(item.getKey(), item.getValue());
             }
@@ -239,6 +233,37 @@ public class UserApiExample {
         }
     }
 
+    private static void demoUserPost(
+            AssumeRoleResult session_token_result,
+            String newUserJsonStr) {
+        try {
+            final InputStream in = buildAndExecutePost(session_token_result,
+                newUserJsonStr);
+            new BufferedReader(new InputStreamReader(in))
+                .lines().forEach(p -> System.out.println(p));
+            in.close();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+    }
+
+    private static void demoUserPut(
+            AssumeRoleResult session_token_result,
+            String loginid,
+            String newUserJsonStr) {
+        try {
+            final InputStream in = buildAndExecutePut(session_token_result,
+                loginid, newUserJsonStr);
+            new BufferedReader(new InputStreamReader(in))
+                .lines().forEach(p -> System.out.println(p));
+            in.close();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+    }
+
     private static AssumeRoleResult getststoken() {
         AWSSecurityTokenService awssts = AWSSecurityTokenServiceClientBuilder
             .standard()
@@ -281,51 +306,26 @@ public class UserApiExample {
             "INFO");
     }
 
-    private static InputStream buildAndExecuteGet(
-            AssumeRoleResult session_token_result,
-            String path,
-            TreeMap<String, String> qParms)
-            throws IOException,
-            ClientProtocolException {
-        URI uri;
-        try {
-            uri = new URIBuilder()
-                .setScheme(CONFIG.getProtocol())
-                .setHost(CONFIG.getHost())
-                .setPath(path)
-                .setParameters(qParms.entrySet().stream()
-                    .map(p -> new BasicNameValuePair(p.getKey(), p.getValue()))
-                    .collect(Collectors.toList()))
-                .build();
-        } catch (URISyntaxException e) {
-            throw new RuntimeException(e);
-        }
-        TreeMap<String, String> awsHeaders = new TreeMap<String, String>();
-        awsHeaders.put("host",
-            uri.getHost());
-        awsHeaders.put("x-amz-security-token",
-            session_token_result.getCredentials().getSessionToken());
-        awsHeaders.put("x-api-key",
-            CONFIG.getApiKey());
-        HttpGet get = new HttpGet(uri);
-        for (Entry<String, String> item : awsHeaders.entrySet()) {
-            get.addHeader(item.getKey(), item.getValue());
-        }
-        AWS4Signer signer = new AWS4Signer();
-        signer.setServiceName(CONFIG.getServiceName());
-        signer.setRegionName(CONFIG.getRegion());
-        HttpEntity ent = HttpClients
-            .custom()
-            .addInterceptorLast(new AWSRequestSigningApacheInterceptor(
-                CONFIG.getServiceName(), signer,
-                new AWSStaticCredentialsProvider(
-                    new BasicAWSCredentials(
-                        session_token_result.getCredentials().getAccessKeyId(),
-                        session_token_result.getCredentials()
-                            .getSecretAccessKey()))))
-            .build()
-            .execute(get)
-            .getEntity();
-        return ent.getContent();
+    public static void main(String[] args) {
+        initlogs();
+        final AssumeRoleResult session_token_result = getststoken();
+        System.out.println("\n\n======== User list demo");
+        demoUserList(session_token_result);
+        System.out.println("\n\n======== User query demo");
+        demoUser(session_token_result, "user1@campusvibe.com");
+        System.out.println("\n\n======== User creation demo");
+        String newUserJsonStr = "{\"loginId\":\""
+                + LOGINID
+                + "\",\"firstName\":\"Andy\",\"lastName\":\"Bernard\",\"roleAdmin\":false,\"roleOrganizer\":false,\"emailAddress\":\"narddog1@campusvibe.com\",\"userType\":\"Staff\",\"program\":\"School of Business\"}";
+        demoUserPost(session_token_result, newUserJsonStr);
+        demoUser(session_token_result, LOGINID);
+        System.out.println("\n\n======== User modification demo");
+        String modUserJsonStr = "{"
+                + "\"loginId\":\""
+                + LOGINID
+                + "\",\"firstName\":\"Andrew\""
+                + "}";
+        demoUserPut(session_token_result, LOGINID,
+            modUserJsonStr);
     }
 }
