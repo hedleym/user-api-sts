@@ -21,6 +21,7 @@ import com.amazonaws.services.securitytoken.model.*;
 
 public class UserApiExample {
 
+    private static final String LOGINID = "test1@campusvibe.com";
     static ClientConfig CONFIG;
     static {
         CONFIG = ClientConfig.load("aws-gw.properties");
@@ -39,9 +40,90 @@ public class UserApiExample {
         System.out.println("\n\n======== User query demo");
         demoUser(session_token_result, "user1@campusvibe.com");
         System.out.println("\n\n======== User creation demo");
-        String newUserJsonStr = "{\"loginId\":\"test1@campusvibe.com\",\"firstName\":\"Andy\",\"lastName\":\"Bernard\",\"roleAdmin\":false,\"roleOrganizer\":false,\"emailAddress\":\"narddog1@campusvibe.com\",\"userType\":\"Staff\",\"program\":\"School of Business\"}";
+        String newUserJsonStr = "{\"loginId\":\""
+                + LOGINID
+                + "\",\"firstName\":\"Andy\",\"lastName\":\"Bernard\",\"roleAdmin\":false,\"roleOrganizer\":false,\"emailAddress\":\"narddog1@campusvibe.com\",\"userType\":\"Staff\",\"program\":\"School of Business\"}";
         demoUserPost(session_token_result, newUserJsonStr);
-        demoUser(session_token_result, "test1@campusvibe.com");
+        demoUser(session_token_result, LOGINID);
+        System.out.println("\n\n======== User modification demo");
+        String modUserJsonStr = "{"
+                + "\"loginId\":\""
+                + LOGINID
+                + "\",\"firstName\":\"Andrew\""
+                + "}";
+        demoUserPut(session_token_result, LOGINID,
+            modUserJsonStr);
+    }
+
+    private static void demoUserPut(
+            AssumeRoleResult session_token_result,
+            String loginid,
+            String newUserJsonStr) {
+        try {
+            final InputStream in = buildAndExecutePut(session_token_result,
+                loginid, newUserJsonStr);
+            new BufferedReader(new InputStreamReader(in))
+                .lines().forEach(p -> System.out.println(p));
+            in.close();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+    }
+
+    private static InputStream buildAndExecutePut(
+            AssumeRoleResult session_token_result,
+            String loginid,
+            String jsonEntity) {
+        URI uri;
+        try {
+            uri = new URIBuilder()
+                .setScheme(CONFIG.getProtocol())
+                .setHost(CONFIG.getHost())
+                .setPath(CONFIG.getPathUserList() + "/" + loginid)
+                .build();
+        } catch (URISyntaxException e) {
+            throw new RuntimeException(e);
+        }
+        TreeMap<String, String> awsHeaders = new TreeMap<String, String>();
+        awsHeaders.put("host",
+            uri.getHost());
+        awsHeaders.put("x-amz-security-token",
+            session_token_result.getCredentials().getSessionToken());
+        awsHeaders.put("x-api-key",
+            CONFIG.getApiKey());
+        try {
+            HttpPut post = new HttpPut(uri);
+            for (Entry<String, String> item : awsHeaders.entrySet()) {
+                post.addHeader(item.getKey(), item.getValue());
+            }
+            StringEntity entity = new StringEntity(jsonEntity);
+            post.setEntity(entity);
+            post.setHeader("Accept", "application/json");
+            post.setHeader("Content-type", "application/json");
+            AWS4Signer signer = new AWS4Signer();
+            signer.setServiceName(CONFIG.getServiceName());
+            signer.setRegionName(CONFIG.getRegion());
+            HttpEntity ent;
+            ent = HttpClients
+                .custom()
+                .addInterceptorLast(new AWSRequestSigningApacheInterceptor(
+                    CONFIG.getServiceName(), signer,
+                    new AWSStaticCredentialsProvider(
+                        new BasicAWSCredentials(
+                            session_token_result.getCredentials()
+                                .getAccessKeyId(),
+                            session_token_result.getCredentials()
+                                .getSecretAccessKey()))))
+                .build()
+                .execute(post)
+                .getEntity();
+            return ent.getContent();
+        } catch (ClientProtocolException e) {
+            throw new RuntimeException(e);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private static void demoUserPost(
