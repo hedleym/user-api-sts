@@ -8,8 +8,9 @@ import java.util.stream.Collectors;
 
 import org.apache.http.HttpEntity;
 import org.apache.http.client.ClientProtocolException;
-import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.*;
 import org.apache.http.client.utils.URIBuilder;
+import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.message.BasicNameValuePair;
 
@@ -37,6 +38,79 @@ public class UserApiExample {
         demoUserList(session_token_result);
         System.out.println("\n\n======== User query demo");
         demoUser(session_token_result, "user1@campusvibe.com");
+        System.out.println("\n\n======== User creation demo");
+        String newUserJsonStr = "{\"loginId\":\"test1@campusvibe.com\",\"firstName\":\"Andy\",\"lastName\":\"Bernard\",\"roleAdmin\":false,\"roleOrganizer\":false,\"emailAddress\":\"narddog1@campusvibe.com\",\"userType\":\"Staff\",\"program\":\"School of Business\"}";
+        demoUserPost(session_token_result, newUserJsonStr);
+        demoUser(session_token_result, "test1@campusvibe.com");
+    }
+
+    private static void demoUserPost(
+            AssumeRoleResult session_token_result,
+            String newUserJsonStr) {
+        try {
+            final InputStream in = buildAndExecutePost(session_token_result,
+                newUserJsonStr);
+            new BufferedReader(new InputStreamReader(in))
+                .lines().forEach(p -> System.out.println(p));
+            in.close();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+
+    }
+
+    private static InputStream buildAndExecutePost(
+            AssumeRoleResult session_token_result,
+            String jsonEntity) {
+        URI uri;
+        try {
+            uri = new URIBuilder()
+                .setScheme(CONFIG.getProtocol())
+                .setHost(CONFIG.getHost())
+                .setPath(CONFIG.getPathUserList())
+                .build();
+        } catch (URISyntaxException e) {
+            throw new RuntimeException(e);
+        }
+        TreeMap<String, String> awsHeaders = new TreeMap<String, String>();
+        awsHeaders.put("host",
+            uri.getHost());
+        awsHeaders.put("x-amz-security-token",
+            session_token_result.getCredentials().getSessionToken());
+        awsHeaders.put("x-api-key",
+            CONFIG.getApiKey());
+        try {
+            HttpPost post = new HttpPost(uri);
+            for (Entry<String, String> item : awsHeaders.entrySet()) {
+                post.addHeader(item.getKey(), item.getValue());
+            }
+            StringEntity entity = new StringEntity(jsonEntity);
+            post.setEntity(entity);
+            post.setHeader("Accept", "application/json");
+            post.setHeader("Content-type", "application/json");
+            AWS4Signer signer = new AWS4Signer();
+            signer.setServiceName(CONFIG.getServiceName());
+            signer.setRegionName(CONFIG.getRegion());
+            HttpEntity ent;
+            ent = HttpClients
+                .custom()
+                .addInterceptorLast(new AWSRequestSigningApacheInterceptor(
+                    CONFIG.getServiceName(), signer,
+                    new AWSStaticCredentialsProvider(
+                        new BasicAWSCredentials(
+                            session_token_result.getCredentials()
+                                .getAccessKeyId(),
+                            session_token_result.getCredentials()
+                                .getSecretAccessKey()))))
+                .build()
+                .execute(post)
+                .getEntity();
+            return ent.getContent();
+        } catch (ClientProtocolException e) {
+            throw new RuntimeException(e);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private static void demoUser(
